@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Disque rouge translucide servant d'onde de pulsation derrière le SOS.
+     L'échelle et l'alpha sont animés par code (purement décoratif). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="?attr/colorPrimary" />
+</shape>

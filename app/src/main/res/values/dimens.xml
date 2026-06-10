@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================================
+         DESIGN TOKENS — ESPACEMENTS, RAYONS, TAILLES
+         Échelle régulière (multiples de 4dp) réutilisée partout.
+         ============================================================ -->
+
+    <!-- Espacements -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">16dp</dimen>
+    <dimen name="space_lg">24dp</dimen>
+    <dimen name="space_xl">32dp</dimen>
+    <dimen name="space_xxl">48dp</dimen>
+
+    <!-- Rayons des coins (alignés sur les shapeAppearance) -->
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">16dp</dimen>
+    <dimen name="radius_lg">28dp</dimen>
+
+    <!-- Bouton SOS -->
+    <dimen name="sos_button_min_height">72dp</dimen>
+    <dimen name="sos_icon_size">28dp</dimen>
+
+    <!-- Bouton SOS circulaire + anneaux de pulsation -->
+    <dimen name="sos_button_diameter">150dp</dimen>
+    <dimen name="sos_text">38sp</dimen>
+    <dimen name="pulse_ring_size">150dp</dimen>
+    <dimen name="contact_icon_size">40dp</dimen>
+
+    <!-- Accessibilité : cible tactile minimale -->
+    <dimen name="touch_min">48dp</dimen>
+
+    <!-- Typographie -->
+    <dimen name="text_title">26sp</dimen>
+    <dimen name="text_subtitle">16sp</dimen>
+    <dimen name="text_button">18sp</dimen>
+    <dimen name="text_label">13sp</dimen>
+    <dimen name="text_contact">20sp</dimen>
+    <dimen name="text_status">15sp</dimen>
+    <dimen name="text_cta">15sp</dimen>
+</resources>

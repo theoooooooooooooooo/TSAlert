@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================================
+         DESIGN TOKENS — COULEURS (mode sombre)
+         Mêmes noms sémantiques que values/colors.xml : seules les
+         valeurs changent, les layouts et thèmes n'ont rien à savoir.
+         ============================================================ -->
+
+    <!-- Accent / marque : rouge un peu plus lumineux pour ressortir
+         sur fond sombre tout en gardant un texte blanc lisible. -->
+    <color name="brand_red">#FFEF5350</color>
+    <color name="brand_red_dark">#FFC62828</color>
+
+    <!-- Surfaces et fond -->
+    <color name="background">#FF121316</color>
+    <color name="surface">#FF1E2023</color>
+    <color name="surface_container">#FF26282C</color>
+    <color name="outline">#FF44474C</color>
+
+    <!-- Texte -->
+    <color name="on_surface">#FFE3E2E6</color>        <!-- ~13:1 sur surface : AAA -->
+    <color name="on_surface_variant">#FFB6BAC2</color> <!-- ~7:1 : texte secondaire AA -->
+</resources>
