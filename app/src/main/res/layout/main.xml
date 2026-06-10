@@ -1,16 +1,171 @@
 <?xml version="1.0" encoding="utf-8"?>
-
+<!--
+    Écran principal de TSAlert — identité "app SOS".
+    PRÉSENTATION UNIQUEMENT : l'id @+id/btnAlerte et android:onClick="sendSMS"
+    sont inchangés pour rester compatibles avec MainActivity.java.
+    clipChildren="false" est nécessaire pour laisser les anneaux de pulsation
+    déborder au-delà du bouton.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:background="?android:attr/colorBackground"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:paddingHorizontal="@dimen/space_lg"
+    android:paddingTop="@dimen/space_xl"
+    android:paddingBottom="@dimen/space_lg">
 
-    <Button
-        android:id="@+id/btnAlerte"
+    <!-- ============ EN-TÊTE COMPACT ============ -->
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Envoyer Alerte SMS"
-        android:onClick="sendSMS"/>
+        android:text="@string/header_title"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="@dimen/text_title"
+        android:textStyle="bold"
+        android:letterSpacing="0.02" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:text="@string/header_subtitle"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="@dimen/text_subtitle"
+        android:lineSpacingMultiplier="1.15" />
+
+    <!-- ============ CENTRE : SOS + ONDES + LIBELLÉS ============ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <!-- Pile centrée : 2 anneaux de pulsation derrière le bouton SOS -->
+        <FrameLayout
+            android:layout_width="@dimen/sos_button_diameter"
+            android:layout_height="@dimen/sos_button_diameter"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <View
+                android:id="@+id/pulseRing2"
+                android:layout_width="@dimen/pulse_ring_size"
+                android:layout_height="@dimen/pulse_ring_size"
+                android:layout_gravity="center"
+                android:alpha="0.30"
+                android:background="@drawable/bg_pulse_ring" />
+
+            <View
+                android:id="@+id/pulseRing1"
+                android:layout_width="@dimen/pulse_ring_size"
+                android:layout_height="@dimen/pulse_ring_size"
+                android:layout_gravity="center"
+                android:alpha="0.45"
+                android:background="@drawable/bg_pulse_ring" />
+
+            <!-- Grand bouton SOS circulaire (id + onClick INCHANGÉS) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAlerte"
+                android:layout_width="@dimen/sos_button_diameter"
+                android:layout_height="@dimen/sos_button_diameter"
+                android:layout_gravity="center"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:onClick="sendSMS"
+                android:text="@string/sos"
+                android:textSize="@dimen/sos_text"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:contentDescription="@string/btn_alert_desc"
+                android:focusable="true"
+                app:backgroundTint="?attr/colorPrimary"
+                app:elevation="@dimen/space_xs"
+                app:rippleColor="?attr/colorOnPrimary"
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.TSAlert.Circle" />
+        </FrameLayout>
+
+        <!-- Libellé d'appel à l'action -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xl"
+            android:text="@string/tap_to_alert"
+            android:textAllCaps="true"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="@dimen/text_cta"
+            android:textStyle="bold"
+            android:letterSpacing="0.10" />
+
+        <!-- Statut décoratif (statique) -->
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_sm"
+            android:gravity="center"
+            android:text="@string/status_idle"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="@dimen/text_status" />
+
+    </LinearLayout>
+
+    <!-- ============ CONTACT D'URGENCE (ancré en bas) ============ -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardBackgroundColor="@color/surface_container"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/outline"
+        app:strokeWidth="1dp"
+        app:shapeAppearance="@style/ShapeAppearance.TSAlert.Medium">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="@dimen/space_md">
+
+            <ImageView
+                android:layout_width="@dimen/contact_icon_size"
+                android:layout_height="@dimen/contact_icon_size"
+                android:src="@drawable/ic_phone"
+                android:contentDescription="@string/contact_icon_desc"
+                android:scaleType="centerInside" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/space_md"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/contact_label"
+                    android:textAllCaps="true"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="@dimen/text_label"
+                    android:letterSpacing="0.08" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_xs"
+                    android:text="@string/contact_number"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="@dimen/text_contact"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </LinearLayout>

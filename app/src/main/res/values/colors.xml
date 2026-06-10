@@ -1,10 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
+    <!-- ============================================================
+         DESIGN TOKENS — COULEURS (mode clair / valeurs par défaut)
+         App d'alerte d'urgence : accent rouge fort pour le SOS,
+         neutres sobres pour les surfaces et le texte.
+         Les variantes nuit sont dans values-night/colors.xml.
+         ============================================================ -->
+
+    <!-- Constantes -->
     <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+
+    <!-- Accent / marque (bouton SOS) -->
+    <color name="brand_red">#FFD32F2F</color>          <!-- ~5.9:1 sur blanc : WCAG AA -->
+    <color name="brand_red_dark">#FFB71C1C</color>     <!-- état pressé / status bar -->
+
+    <!-- Surfaces et fond -->
+    <color name="background">#FFF6F7F9</color>         <!-- fond d'écran neutre clair -->
+    <color name="surface">#FFFFFFFF</color>            <!-- cartes / conteneurs -->
+    <color name="surface_container">#FFEFF1F4</color>  <!-- surface secondaire -->
+    <color name="outline">#FFD4D7DC</color>            <!-- bordures discrètes -->
+
+    <!-- Texte -->
+    <color name="on_surface">#FF1A1C1E</color>         <!-- ~15:1 sur surface : AAA -->
+    <color name="on_surface_variant">#FF54585F</color> <!-- ~7:1 : texte secondaire AA -->
 </resources>

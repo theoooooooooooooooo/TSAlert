@@ -1,3 +1,21 @@
 <resources>
     <string name="app_name">TSAlert</string>
+
+    <!-- En-tête -->
+    <string name="header_title">TSAlert</string>
+    <string name="header_subtitle">Envoyez votre position à votre contact d\'urgence d\'un seul geste.</string>
+
+    <!-- Bouton d'alerte -->
+    <string name="btn_alert">Envoyer l\'alerte SMS</string>
+    <string name="btn_alert_desc">Envoyer une alerte d\'urgence par SMS avec ma position</string>
+    <string name="sos">SOS</string>
+    <string name="tap_to_alert">Appuyez pour alerter</string>
+    <string name="contact_icon_desc">Téléphone du contact d\'urgence</string>
+
+    <!-- Zone contact d'urgence -->
+    <string name="contact_label">Contact d\'urgence</string>
+    <string name="contact_number">+1 555-123-4567</string>
+
+    <!-- Message de statut (statique pour l'instant) -->
+    <string name="status_idle">Prêt à envoyer une alerte.</string>
 </resources>
