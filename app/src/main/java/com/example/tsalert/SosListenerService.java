@@ -18,6 +18,7 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.vosk.Model;
 import org.vosk.Recognizer;
@@ -71,6 +72,15 @@ public class SosListenerService extends Service implements RecognitionListener {
      */
     public static final String WAKE_WORD = "sos";
 
+    /**
+     * Seuil de confiance minimal (0.0–1.0) pour accepter « sos » comme un vrai
+     * déclenchement. Anti faux positif : en dessous, la détection est ignorée.
+     * NB : « sos » (sigle court) sort souvent à faible confiance — d'où ce seuil
+     * abaissé à 0.3. Remonter si trop de faux positifs, baisser si de vrais
+     * « sos » sont rejetés.
+     */
+    private static final double WAKE_CONF_THRESHOLD = 0.3;
+
     /** Mot de confirmation vocale (« oui » → envoi immédiat). */
     public static final String CONFIRM_WORD = "oui";
     /** Mot d'annulation vocale (« non » → annulation immédiate). */
@@ -93,9 +103,11 @@ public class SosListenerService extends Service implements RecognitionListener {
     private static final long CYCLE_MAX_MS = 8_000L;
 
     /**
-     * Court anti-doublon APRÈS un envoi : on ignore « sos » pendant ce délai pour
-     * ne pas renvoyer un SMS immédiatement. Après une ANNULATION, pas de garde
-     * (libération immédiate, on peut redire « sos » tout de suite).
+     * Anti-doublon APRÈS un envoi : on ignore « sos » pendant ce délai pour ne
+     * pas renvoyer une alerte tout de suite. Après une ANNULATION, pas de garde
+     * (libération immédiate, on peut redire « sos » aussitôt).
+     * 3 s : assez court pour enchaîner plusieurs SOS, assez long pour éviter un
+     * double-envoi accidental sur la même détection.
      */
     private static final long SEND_GUARD_MS = 3_000L;
 
@@ -108,19 +120,55 @@ public class SosListenerService extends Service implements RecognitionListener {
     /** Échéance du court anti-doublon post-envoi. */
     private static volatile long sendGuardUntilElapsed = 0L;
 
+    /**
+     * Instance vivante du service (même process que MainActivity), pour que la
+     * méthode statique {@link #notifyCycleResolved(boolean)} puisse relancer
+     * proprement l'écoute à la résolution du cycle.
+     */
+    private static volatile SosListenerService instance;
+
     private Model model;
+    private Recognizer recognizer;
     private SpeechService speechService;
 
     /**
      * Notifie le service que le cycle d'alerte est résolu (appelé par
      * MainActivity). Après ENVOI : court anti-doublon. Après ANNULATION :
      * libération immédiate (sent=false) → « sos » réutilisable aussitôt.
+     * <p>
+     * Relance aussi l'écoute dans un état propre : sans cela, après un premier
+     * cycle (envoi ou annulation) Vosk ne redétectait plus rien.
      */
     public static void notifyCycleResolved(boolean sent) {
         alertCycleActive = false;
         sendGuardUntilElapsed = sent
                 ? SystemClock.elapsedRealtime() + SEND_GUARD_MS
                 : 0L;
+        SosListenerService self = instance;
+        if (self != null) {
+            self.resumeAndResetRecognition();
+        }
+    }
+
+    /**
+     * Remet l'écoute dans un état propre à la fin d'un cycle.
+     * <p>
+     * Le SpeechService est arrêté après le premier cycle (son thread de
+     * reconnaissance ne reprend pas) : {@code setPause(false)} + {@code reset()}
+     * ne suffisent donc pas. On RECRÉE entièrement l'écoute — exactement ce que
+     * fait le re-toggle du switch — via {@link #startRecognition()} (stop propre
+     * + nouveau Recognizer/SpeechService + startListening).
+     * Objectif : pouvoir redire « sos » et être détecté immédiatement.
+     */
+    private void resumeAndResetRecognition() {
+        if (model == null) {
+            return; // modèle non chargé : rien à recréer
+        }
+        try {
+            startRecognition(); // stop propre + recréation complète de l'écoute
+        } catch (Exception e) {
+            Log.e(TAG, "Échec de la réinitialisation de l'écoute", e);
+        }
     }
 
     /** Un cycle est-il en cours ? (avec auto-libération de sécurité.) */
@@ -131,6 +179,7 @@ public class SosListenerService extends Service implements RecognitionListener {
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         createChannels();
     }
 
@@ -156,7 +205,9 @@ public class SosListenerService extends Service implements RecognitionListener {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
 
-        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        // FOREGROUND_SERVICE_TYPE_MICROPHONE n'est référencé que sur API >= 30 ;
+        // en dessous, on passe 0 (type ignoré par ServiceCompat).
+        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 : 0;
         ServiceCompat.startForeground(this, NOTIF_LISTENING_ID, notif, type);
@@ -184,10 +235,20 @@ public class SosListenerService extends Service implements RecognitionListener {
         );
     }
 
-    /** Configure le Recognizer en mode grammaire et démarre le SpeechService. */
+    /**
+     * (Re)configure le Recognizer en mode grammaire et démarre le SpeechService.
+     * Idempotent : toute écoute en cours est d'abord proprement arrêtée, de sorte
+     * que cette méthode sert AUSSI bien au démarrage initial qu'à la
+     * réinitialisation entre deux cycles (cf. {@link #resumeAndResetRecognition()}).
+     */
     private void startRecognition() {
+        // Repart toujours d'un état propre (no-op au premier démarrage).
+        stopRecognition();
         try {
-            Recognizer recognizer = new Recognizer(model, SAMPLE_RATE, GRAMMAR);
+            recognizer = new Recognizer(model, SAMPLE_RATE, GRAMMAR);
+            // Confiances par mot : le JSON du résultat final inclut un tableau
+            // "result" avec un "conf" par mot, exploité pour filtrer « sos ».
+            recognizer.setWords(true);
             speechService = new SpeechService(recognizer, SAMPLE_RATE);
             speechService.startListening(this);
             Log.i(TAG, "Écoute vocale démarrée (grammaire: " + GRAMMAR + ")");
@@ -197,27 +258,43 @@ public class SosListenerService extends Service implements RecognitionListener {
         }
     }
 
+    /**
+     * Arrête et libère l'écoute courante (SpeechService + Recognizer) si présente.
+     * {@code SpeechService.stop()} interrompt et joint son thread de
+     * reconnaissance : une fois revenu, plus personne n'utilise le Recognizer,
+     * on peut donc le fermer sans course de données.
+     */
+    private void stopRecognition() {
+        if (speechService != null) {
+            speechService.stop();
+            speechService.shutdown();
+            speechService = null;
+        }
+        if (recognizer != null) {
+            recognizer.close();
+            recognizer = null;
+        }
+    }
+
     // ----- RecognitionListener -----
 
     @Override
     public void onResult(String hypothesis) {
-        // LOG TEMPORAIRE : transcription brute de Vosk (à retirer en prod).
-        Log.d(TAG, "result brut: " + hypothesis);
-        handleHypothesis(hypothesis, "text"); // {"text" : "..."}
+        // Résultat FINAL : seul moment où « sos » peut déclencher le SOS
+        // (transcription stable + confiances disponibles).
+        handleHypothesis(hypothesis, "text", true); // {"text" : "...", "result":[...]}
     }
 
     @Override
     public void onPartialResult(String hypothesis) {
-        // LOG TEMPORAIRE : transcription partielle brute de Vosk (à retirer en prod).
-        Log.d(TAG, "partialResult brut: " + hypothesis);
-        handleHypothesis(hypothesis, "partial"); // {"partial" : "..."} — réactivité accrue
+        // Partiel : instable et sans confiance → sert UNIQUEMENT à la réactivité
+        // oui/non pendant un cycle, JAMAIS au déclenchement du SOS.
+        handleHypothesis(hypothesis, "partial", false); // {"partial" : "..."}
     }
 
     @Override
     public void onFinalResult(String hypothesis) {
-        // LOG TEMPORAIRE : transcription finale brute de Vosk (à retirer en prod).
-        Log.d(TAG, "finalResult brut: " + hypothesis);
-        handleHypothesis(hypothesis, "text");
+        handleHypothesis(hypothesis, "text", true);
     }
 
     @Override
@@ -232,12 +309,17 @@ public class SosListenerService extends Service implements RecognitionListener {
 
     /**
      * Route une hypothèse Vosk selon l'état :
-     *  - pendant la fenêtre de confirmation : « non » annule, « oui » envoie ;
-     *  - sinon (au repos) : « sos » déclenche le compte à rebours.
+     *  - pendant la fenêtre de confirmation : « non » annule, « oui » envoie
+     *    (partiel accepté pour la réactivité) ;
+     *  - sinon (au repos) : « sos » déclenche le compte à rebours, mais
+     *    UNIQUEMENT sur un résultat final propre et suffisamment confiant
+     *    (cf. {@link #isAcceptableWakeWord(String, java.util.List)}).
      * La comparaison se fait token par token (égalité stricte) pour ne pas
      * matcher un fragment au sein d'un autre mot.
+     *
+     * @param isFinal résultat final (true) ou partiel (false).
      */
-    private void handleHypothesis(String hypothesisJson, String key) {
+    private void handleHypothesis(String hypothesisJson, String key, boolean isFinal) {
         String text = extractText(hypothesisJson, key);
         if (text.isEmpty()) {
             return;
@@ -258,9 +340,52 @@ public class SosListenerService extends Service implements RecognitionListener {
                 Log.i(TAG, "« oui » détecté → envoi vocal immédiat");
                 sendActionToActivity(MainActivity.ACTION_SOS_CONFIRM);
             }
-        } else if (words.contains(WAKE_WORD)) {
+        } else if (isFinal && isAcceptableWakeWord(hypothesisJson, words)) {
             triggerSosFlow();
         }
+    }
+
+    /**
+     * Vrai seulement si le résultat final correspond PROPREMENT au mot
+     * déclencheur, pour écarter les faux positifs :
+     *  1. le texte reconnu est EXACTEMENT « sos » (un seul token) : on rejette
+     *     les cas où « sos » est noyé au milieu d'autres tokens ([unk], bruit…) ;
+     *  2. la confiance du mot « sos » (tableau "result", via setWords(true))
+     *     dépasse {@link #WAKE_CONF_THRESHOLD}.
+     */
+    private boolean isAcceptableWakeWord(String hypothesisJson, java.util.List<String> words) {
+        // 1. « sos » doit être le SEUL token reconnu (sinon : noyé → ignoré).
+        if (words.size() != 1 || !WAKE_WORD.equals(words.get(0))) {
+            return false;
+        }
+        // 2. Confiance du mot déclencheur.
+        return wakeWordConfidence(hypothesisJson) >= WAKE_CONF_THRESHOLD;
+    }
+
+    /**
+     * Confiance du mot « sos » dans le tableau "result" du JSON final
+     * (présent grâce à {@code recognizer.setWords(true)}). 0 si absent/illisible.
+     */
+    private double wakeWordConfidence(String hypothesisJson) {
+        if (hypothesisJson == null) {
+            return 0.0;
+        }
+        try {
+            JSONArray result = new JSONObject(hypothesisJson).optJSONArray("result");
+            if (result == null) {
+                return 0.0;
+            }
+            for (int i = 0; i < result.length(); i++) {
+                JSONObject w = result.getJSONObject(i);
+                String word = w.optString("word", "").trim().toLowerCase();
+                if (WAKE_WORD.equals(word)) {
+                    return w.optDouble("conf", 0.0);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Confiance illisible: " + hypothesisJson, e);
+        }
+        return 0.0;
     }
 
     /** Extrait le texte (minuscules) de la clé demandée d'une hypothèse JSON. */
@@ -407,12 +532,8 @@ public class SosListenerService extends Service implements RecognitionListener {
 
     @Override
     public void onDestroy() {
-        // Libération propre du micro et du modèle.
-        if (speechService != null) {
-            speechService.stop();
-            speechService.shutdown();
-            speechService = null;
-        }
+        // Libération propre du micro (SpeechService + Recognizer) et du modèle.
+        stopRecognition();
         if (model != null) {
             model.close();
             model = null;
@@ -420,6 +541,10 @@ public class SosListenerService extends Service implements RecognitionListener {
         // Réinitialise la garde : un prochain démarrage repart d'un état propre.
         alertCycleActive = false;
         sendGuardUntilElapsed = 0L;
+        // Évite que notifyCycleResolved n'agisse sur un service détruit.
+        if (instance == this) {
+            instance = null;
+        }
         Log.i(TAG, "Service d'écoute arrêté, ressources libérées");
         super.onDestroy();
     }
