@@ -1,0 +1,5 @@
+# Modèle Vosk : fichiers binaires ET fichiers de config sensibles aux fins de
+# ligne. On force le traitement binaire (-text) pour empêcher TOUTE conversion
+# CRLF au checkout, qui corromprait le chargement du modèle par Vosk sur les
+# machines Windows (core.autocrlf=true).
+app/src/main/assets/model-fr/** binary
