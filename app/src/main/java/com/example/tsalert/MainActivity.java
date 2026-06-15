@@ -55,6 +55,9 @@ public class MainActivity extends Activity {
     private static final int REQ_SMS_LOCATION = 0; // demande liée au clic SOS
     private static final int REQ_VOICE = 1;        // demande liée à l'écoute vocale
 
+    /** Préférence : l'écoute vocale était-elle activée ? (persiste au redémarrage) */
+    private static final String KEY_VOICE_ENABLED = "voice_enabled";
+
     // --- Son d'alerte joué au clic SOS ---
     private SoundPool soundPool;
     private int alertSoundId;
@@ -253,13 +256,14 @@ public class MainActivity extends Activity {
             return;
         }
 
-        new AlertSender(this).sendAlert();
-
-        Toast.makeText(
-                this,
-                "SMS envoyé au " + AlertSender.getNumero(this),
-                Toast.LENGTH_SHORT
-        ).show();
+        // Envoi asynchrone : la position est fiabilisée (cache puis fix actif
+        // ~5 s) sans bloquer l'UI ; le Toast s'affiche une fois le SMS parti.
+        new AlertSender(this).sendAlert(found ->
+                Toast.makeText(
+                        this,
+                        "SMS envoyé au " + AlertSender.getNumero(this),
+                        Toast.LENGTH_SHORT
+                ).show());
     }
 
     /**
@@ -293,29 +297,73 @@ public class MainActivity extends Activity {
     // ===================== ÉCOUTE VOCALE =====================
 
     /**
-     * Câble le Switch « Activer l'écoute vocale ». Démarrer / arrêter le
-     * foreground service se fait UNIQUEMENT ici, app au premier plan.
+     * Câble le Switch « Activer l'écoute vocale » et RESTAURE son état persisté.
+     * Si l'utilisateur l'avait activé, le switch reste coché après un
+     * redémarrage du téléphone et l'écoute se ré-arme à l'ouverture de l'app.
+     *
+     * Note : Android n'autorise pas le démarrage fiable d'un foreground service
+     * micro depuis le boot (cf. NOTES.md) ; l'écoute reprend donc à la première
+     * ouverture de l'app, mais l'état du toggle, lui, est bien conservé.
      */
     private void setupVoiceSwitch() {
         voiceSwitch = findViewById(R.id.switchVoice);
         if (voiceSwitch == null) {
             return;
         }
-        voiceSwitch.setOnCheckedChangeListener((button, isChecked) -> {
-            if (isChecked) {
-                if (hasVoicePermissions()) {
-                    startVoiceService();
-                } else {
-                    // On demande les permissions ; le service démarrera au retour
-                    // si tout est accordé. On évite de laisser le switch « on »
-                    // tant que l'écoute n'a pas réellement commencé.
-                    requestVoicePermissions();
-                    voiceSwitch.setChecked(false);
-                }
+
+        boolean wasEnabled = isVoiceEnabledPref();
+        // Si les permissions ont été retirées entre-temps, on reflète l'état réel.
+        if (wasEnabled && !hasVoicePermissions()) {
+            setVoiceEnabledPref(false);
+            wasEnabled = false;
+        }
+
+        // Restaure l'état visuel SANS déclencher le listener, puis l'attache.
+        setVoiceSwitchChecked(wasEnabled);
+
+        // Ré-arme réellement l'écoute si elle était activée (sans Toast au lancement).
+        if (wasEnabled) {
+            startVoiceService(false);
+        }
+    }
+
+    /** Coche/décoche le switch sans déclencher le listener, puis (ré)attache le listener. */
+    private void setVoiceSwitchChecked(boolean checked) {
+        voiceSwitch.setOnCheckedChangeListener(null);
+        voiceSwitch.setChecked(checked);
+        voiceSwitch.setOnCheckedChangeListener(
+                (button, isChecked) -> onVoiceSwitchToggled(isChecked));
+    }
+
+    /** Action utilisateur sur le switch : démarre/arrête l'écoute et persiste le choix. */
+    private void onVoiceSwitchToggled(boolean isChecked) {
+        if (isChecked) {
+            if (hasVoicePermissions()) {
+                setVoiceEnabledPref(true);
+                startVoiceService(true);
             } else {
-                stopVoiceService();
+                // On demande les permissions ; le service démarrera au retour
+                // si tout est accordé. On laisse le switch off en attendant.
+                requestVoicePermissions();
+                setVoiceSwitchChecked(false);
             }
-        });
+        } else {
+            setVoiceEnabledPref(false);
+            stopVoiceService();
+        }
+    }
+
+    /** État persisté du toggle d'écoute vocale (survit aux redémarrages). */
+    private boolean isVoiceEnabledPref() {
+        return getSharedPreferences(AlertSender.PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_VOICE_ENABLED, false);
+    }
+
+    private void setVoiceEnabledPref(boolean enabled) {
+        getSharedPreferences(AlertSender.PREFS, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_VOICE_ENABLED, enabled)
+                .apply();
     }
 
     /** RECORD_AUDIO (toujours) + POST_NOTIFICATIONS (API >= 33). */
@@ -342,18 +390,21 @@ public class MainActivity extends Activity {
         requestPermissions(perms.toArray(new String[0]), REQ_VOICE);
     }
 
-    /** Démarre le foreground service micro (jamais depuis le background). */
-    private void startVoiceService() {
+    /**
+     * Démarre le foreground service micro (jamais depuis le background).
+     * @param userInitiated affiche un Toast de confirmation (false pour la
+     *                       restauration silencieuse au lancement de l'app).
+     */
+    private void startVoiceService(boolean userInitiated) {
         Intent intent = new Intent(this, SosListenerService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent);
         } else {
             startService(intent);
         }
-        if (voiceSwitch != null && !voiceSwitch.isChecked()) {
-            voiceSwitch.setChecked(true);
+        if (userInitiated) {
+            Toast.makeText(this, R.string.voice_started, Toast.LENGTH_SHORT).show();
         }
-        Toast.makeText(this, R.string.voice_started, Toast.LENGTH_SHORT).show();
     }
 
     private void stopVoiceService() {
@@ -370,11 +421,16 @@ public class MainActivity extends Activity {
             boolean micGranted = checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                     == PackageManager.PERMISSION_GRANTED;
             if (micGranted) {
-                startVoiceService();
+                setVoiceEnabledPref(true);
+                if (voiceSwitch != null) {
+                    setVoiceSwitchChecked(true); // coche sans re-déclencher le listener
+                }
+                startVoiceService(true);
             } else {
                 Toast.makeText(this, R.string.voice_perm_denied, Toast.LENGTH_LONG).show();
+                setVoiceEnabledPref(false);
                 if (voiceSwitch != null) {
-                    voiceSwitch.setChecked(false);
+                    setVoiceSwitchChecked(false);
                 }
             }
         }
@@ -522,10 +578,13 @@ public class MainActivity extends Activity {
             return;
         }
         playAlertSound();
-        new AlertSender(this).sendAlert();
-        Toast.makeText(this, "SMS envoyé au " + AlertSender.getNumero(this), Toast.LENGTH_SHORT).show();
-        // Envoi effectué : court anti-doublon avant qu'un nouveau « sos » re-déclenche.
+        // Cycle résolu : on libère la garde tout de suite (l'envoi est lancé).
         SosListenerService.notifyCycleResolved(true);
+        // Position fiabilisée (cache puis fix actif ~5 s) : envoi asynchrone,
+        // Toast affiché une fois le SMS parti.
+        new AlertSender(this).sendAlert(found ->
+                Toast.makeText(this, "SMS envoyé au " + AlertSender.getNumero(this),
+                        Toast.LENGTH_SHORT).show());
     }
 
     /** Permet l'affichage par-dessus l'écran verrouillé (full-screen intent). */
