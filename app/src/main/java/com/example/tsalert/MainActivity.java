@@ -19,6 +19,7 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -57,6 +58,8 @@ public class MainActivity extends Activity {
 
     /** Préférence : l'écoute vocale était-elle activée ? (persiste au redémarrage) */
     private static final String KEY_VOICE_ENABLED = "voice_enabled";
+
+    private static final String TAG = "MainActivity";
 
     // --- Son d'alerte joué au clic SOS ---
     private SoundPool soundPool;
@@ -165,12 +168,9 @@ public class MainActivity extends Activity {
                 .build();
 
         // Ne jouer que lorsque le sample est prêt : évite un premier clic muet.
-        soundPool.setOnLoadCompleteListener(new SoundPool.OnLoadCompleteListener() {
-            @Override
-            public void onLoadComplete(SoundPool sp, int sampleId, int status) {
-                if (status == 0 && sampleId == alertSoundId) {
-                    alertSoundLoaded = true;
-                }
+        soundPool.setOnLoadCompleteListener((sp, sampleId, status) -> {
+            if (status == 0 && sampleId == alertSoundId) {
+                alertSoundLoaded = true;
             }
         });
 
@@ -199,7 +199,7 @@ public class MainActivity extends Activity {
                 toneGenerator.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1000);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.w(TAG, "Lecture du son d'alerte impossible", e);
         }
     }
 
@@ -231,7 +231,7 @@ public class MainActivity extends Activity {
 
     /**
      * Déclenché par le clic sur le bouton SOS (android:onClick="sendSMS").
-     *
+     * <p>
      * MainActivity ne s'occupe plus QUE de l'UI et des permissions :
      *  - signal sonore d'alerte ;
      *  - vérification / demande des permissions runtime ;
@@ -243,13 +243,12 @@ public class MainActivity extends Activity {
         // Signal sonore d'alerte, avant toute la logique (permissions, GPS, SMS).
         playAlertSound();
 
-        if (checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED ||
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-
+        if (!hasSmsPermission() || !hasLocationPermission()) {
             requestPermissions(
                     new String[]{
                             Manifest.permission.SEND_SMS,
-                            Manifest.permission.ACCESS_FINE_LOCATION
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
                     },
                     REQ_SMS_LOCATION
             );
@@ -300,7 +299,7 @@ public class MainActivity extends Activity {
      * Câble le Switch « Activer l'écoute vocale » et RESTAURE son état persisté.
      * Si l'utilisateur l'avait activé, le switch reste coché après un
      * redémarrage du téléphone et l'écoute se ré-arme à l'ouverture de l'app.
-     *
+     * <p>
      * Note : Android n'autorise pas le démarrage fiable d'un foreground service
      * micro depuis le boot (cf. NOTES.md) ; l'écoute reprend donc à la première
      * ouverture de l'app, mais l'état du toggle, lui, est bien conservé.
@@ -366,23 +365,44 @@ public class MainActivity extends Activity {
                 .apply();
     }
 
+    /** Permission d'envoi de SMS accordée ? */
+    private boolean hasSmsPermission() {
+        return checkSelfPermission(Manifest.permission.SEND_SMS)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * Permission de localisation accordée ? On accepte « Précise » (FINE) OU
+     * « Approximative » (COARSE) : ainsi l'envoi n'est plus bloqué si
+     * l'utilisateur choisit « Approximative » sur Android 12+.
+     */
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
     /** RECORD_AUDIO (toujours) + POST_NOTIFICATIONS (API >= 33). */
     private boolean hasVoicePermissions() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
             return false;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
-            return false;
-        }
-        return true;
+        // POST_NOTIFICATIONS n'est une permission runtime que depuis API 33.
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestVoicePermissions() {
         List<String> perms = new ArrayList<>();
         perms.add(Manifest.permission.RECORD_AUDIO);
+        // Permissions nécessaires à l'envoi réel de l'alerte vocale : on les
+        // demande dès l'activation de l'écoute pour que le SOS puisse partir.
+        perms.add(Manifest.permission.SEND_SMS);
+        perms.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        perms.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         // POST_NOTIFICATIONS est une permission runtime seulement depuis API 33.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS);
@@ -555,7 +575,8 @@ public class MainActivity extends Activity {
             }
             countdownTone.startTone(ToneGenerator.TONE_PROP_BEEP, 200);
         } catch (Exception e) {
-            e.printStackTrace(); // un échec audio ne doit jamais bloquer le flux
+            // un échec audio ne doit jamais bloquer le flux
+            Log.w(TAG, "Bip de compte à rebours impossible", e);
         }
     }
 
@@ -568,8 +589,7 @@ public class MainActivity extends Activity {
 
     /** Envoi réel après expiration du compte à rebours, via AlertSender. */
     private void performVocalAlert() {
-        if (checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED ||
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (!hasSmsPermission() || !hasLocationPermission()) {
             // Impossible de demander des permissions de façon fiable dans ce flux
             // (potentiellement écran verrouillé) : on informe l'utilisateur.
             Toast.makeText(this, R.string.voice_alert_no_perm, Toast.LENGTH_LONG).show();
