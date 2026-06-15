@@ -13,3 +13,12 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Config IDE Android Studio (tout le dossier)
+/.idea/
+
+# Modèle Vosk : volumineux (~65 Mo), à déposer manuellement (cf. NOTES.md).
+# On garde uniquement le guide de dépôt et le fichier uuid requis par Vosk.
+/app/src/main/assets/model-fr/*
+!/app/src/main/assets/model-fr/PLACER_LE_MODELE_ICI.txt
+!/app/src/main/assets/model-fr/uuid

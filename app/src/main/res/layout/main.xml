@@ -116,6 +116,48 @@
 
     </LinearLayout>
 
+    <!-- ============ ÉCOUTE VOCALE MAINS-LIBRES ============ -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/space_md"
+        app:cardBackgroundColor="@color/surface_container"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/outline"
+        app:strokeWidth="1dp"
+        app:shapeAppearance="@style/ShapeAppearance.TSAlert.Medium">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/space_md">
+
+            <!-- SwitchMaterial (Material Components / M2) : compatible avec
+                 Theme.MaterialComponents. MaterialSwitch (M3) crashait sous ce
+                 thème (showText=true + textOn/Off null dans SwitchCompat). -->
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchVoice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_switch_label"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="@dimen/text_contact"
+                android:textStyle="bold"
+                app:showText="false" />
+
+            <!-- Avis vie privée : l'écoute permanente du micro doit être signalée. -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                android:text="@string/voice_privacy_notice"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="@dimen/text_status"
+                android:lineSpacingMultiplier="1.15" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
     <!-- ============ CONTACT D'URGENCE (ancré en bas) ============ -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
@@ -156,14 +198,20 @@
                     android:textSize="@dimen/text_label"
                     android:letterSpacing="0.08" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <!-- Numéro configurable, persisté en SharedPreferences (cf. AlertSender). -->
+                <EditText
+                    android:id="@+id/etContactNumber"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/space_xs"
-                    android:text="@string/contact_number"
+                    android:inputType="phone"
+                    android:hint="@string/contact_number_hint"
+                    android:autofillHints="phone"
                     android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?android:attr/textColorSecondary"
                     android:textSize="@dimen/text_contact"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:contentDescription="@string/contact_number_desc" />
             </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

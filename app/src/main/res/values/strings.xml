@@ -15,7 +15,35 @@
     <!-- Zone contact d'urgence -->
     <string name="contact_label">Contact d\'urgence</string>
     <string name="contact_number">+1 555-123-4567</string>
+    <string name="contact_number_hint">Numéro du contact d\'urgence</string>
+    <string name="contact_number_desc">Champ de saisie du numéro du contact d\'urgence</string>
 
     <!-- Message de statut (statique pour l'instant) -->
     <string name="status_idle">Prêt à envoyer une alerte.</string>
+
+    <!-- Écoute vocale mains-libres -->
+    <string name="voice_switch_label">Activer l\'écoute vocale</string>
+    <string name="voice_privacy_notice">⚠️ Vie privée : une fois activée, l\'application écoute le micro en continu (même fermée) pour détecter le mot « SOS ». La reconnaissance se fait hors ligne, rien n\'est envoyé sur Internet. Cette écoute consomme de la batterie.</string>
+    <string name="voice_started">Écoute vocale activée.</string>
+    <string name="voice_perm_denied">Permission micro refusée : écoute vocale impossible.</string>
+
+    <!-- Notification persistante du service d'écoute -->
+    <string name="voice_notif_title">Écoute vocale SOS active</string>
+    <string name="voice_notif_text">Dites « SOS » pour déclencher une alerte.</string>
+    <string name="voice_channel_listening">Écoute vocale</string>
+    <string name="voice_channel_listening_desc">Notification persistante pendant l\'écoute du micro.</string>
+    <string name="voice_model_error">Modèle vocal introuvable : déposez-le dans assets/model-fr.</string>
+
+    <!-- Notification full-screen de déclenchement -->
+    <string name="voice_alert_title">« SOS » détecté</string>
+    <string name="voice_alert_text">Appuyez pour confirmer ou annuler l\'envoi.</string>
+    <string name="voice_channel_alert">Alerte SOS vocale</string>
+    <string name="voice_channel_alert_desc">Déclenchement d\'urgence par détection vocale.</string>
+
+    <!-- Compte à rebours d'annulation -->
+    <string name="countdown_title">« SOS » détecté</string>
+    <string name="countdown_message">Envoi de l\'alerte dans %1$d s…\nDites « oui » pour envoyer, « non » pour annuler.</string>
+    <string name="countdown_cancel">Annuler</string>
+    <string name="countdown_send_now">Envoyer</string>
+    <string name="voice_alert_no_perm">Permissions SMS/position manquantes : ouvrez l\'app pour les accorder.</string>
 </resources>

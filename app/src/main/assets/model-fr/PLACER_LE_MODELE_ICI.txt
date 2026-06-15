@@ -1,0 +1,27 @@
+DÉPÔT DU MODÈLE VOSK FRANÇAIS
+=============================
+
+Le modèle Vosk (~65 Mo) n'est PAS versionné dans git (voir .gitignore).
+Après un clone, dépose-le ici manuellement.
+
+Modèle recommandé : vosk-model-small-fr-0.22
+Téléchargement   : https://alphacephei.com/vosk/models
+
+ARBORESCENCE ATTENDUE
+---------------------
+Décompresse le CONTENU du modèle DIRECTEMENT sous ce dossier :
+
+    app/src/main/assets/model-fr/
+        am/
+        conf/
+        graph/
+        ivector/
+        README
+        uuid          <- déjà versionné (requis par StorageService)
+
+ATTENTION : ne laisse PAS le dossier intermédiaire de l'archive.
+Mauvais  : assets/model-fr/vosk-model-small-fr-0.22/am/...
+Bon      : assets/model-fr/am/...
+
+Le nom "model-fr" est référencé par SosListenerService.MODEL_ASSET.
+Voir aussi NOTES.md (section "Où déposer le modèle Vosk").

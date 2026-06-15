@@ -3,6 +3,21 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+
+    <!-- Écoute vocale hors ligne (Vosk) en foreground service -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Vibration pendant le compte à rebours (alerte imminente, mains-libres) -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- API >= 34 : type de foreground service micro obligatoire -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <!-- API >= 33 : notification persistante du service -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- API >= 34 : sans elle, la full-screen intent est rétrogradée en heads-up.
+         Non auto-accordée hors apps d'appel/réveil : on vérifie aussi
+         canUseFullScreenIntent() à l'exécution avec repli heads-up. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -14,6 +29,7 @@
         android:theme="@style/Theme.TSAlert" >
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -21,6 +37,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Service d'écoute vocale : foreground service de type micro.
+             Démarré uniquement depuis l'app au premier plan (voir MainActivity). -->
+        <service
+            android:name=".SosListenerService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
     </application>
 
 </manifest>
