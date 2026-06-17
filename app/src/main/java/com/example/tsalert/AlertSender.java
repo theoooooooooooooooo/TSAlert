@@ -13,7 +13,9 @@ import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.Looper;
 import android.telephony.SmsManager;
+import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.io.IOException;
@@ -24,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Logique métier d'envoi d'alerte, réutilisable par l'Activity (clic SOS) et le
  * service (détection vocale).
- *
+ * <p>
  * Fiabilisation de la position (asynchrone, sans bloquer le thread appelant) :
  *  1. fix immédiat depuis le cache : getLastKnownLocation GPS puis NETWORK ;
  *  2. si rien en cache, demande un fix ACTIF (getCurrentLocation sur API >= 30,
@@ -32,12 +34,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *  3. construit le message (coordonnées + adresse + lien Maps) à partir du
  *     meilleur fix ; si aucun fix au timeout, "Position introuvable" mais
  *     l'alerte est ENVOYÉE quand même.
- *
+ * <p>
  * getCurrentLocation étant asynchrone, l'envoi se fait par callback. Le
  * géocodage (bloquant) et l'envoi du SMS sont exécutés hors du thread principal.
- *
+ * <p>
  * Ne gère PAS les permissions : l'appelant garantit SEND_SMS et
- * ACCESS_FINE_LOCATION avant d'appeler {@link #sendAlert()}.
+ * ACCESS_FINE_LOCATION avant d'appeler {@link #sendAlert(Callback)}.
  */
 public class AlertSender {
 
@@ -50,6 +52,12 @@ public class AlertSender {
 
     /** Délai max d'attente d'un fix GPS actif avant d'envoyer sans position. */
     private static final long FIX_TIMEOUT_MS = 5_000L;
+
+    /** Texte d'urgence court, en tête du SMS. */
+    private static final String URGENCE = "Urgence, j'ai besoin d'aide.";
+
+    /** Longueur max d'un SMS en une seule part (GSM-7) : au-delà, multipart. */
+    private static final int SMS_SINGLE_PART_MAX = 160;
 
     private final Context context;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -74,7 +82,9 @@ public class AlertSender {
         String saved = context
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getString(KEY_NUMERO, DEFAULT_NUMERO);
-        if (saved == null || saved.trim().isEmpty()) {
+        // getString renvoie au moins la valeur par défaut (non nulle) ; on ne
+        // teste donc que le cas "vide".
+        if (saved.trim().isEmpty()) {
             return DEFAULT_NUMERO;
         }
         return saved.trim();
@@ -89,11 +99,6 @@ public class AlertSender {
     }
 
     // ===================== Envoi de l'alerte =====================
-
-    /** Variante simple sans callback. */
-    public void sendAlert() {
-        sendAlert(null);
-    }
 
     /**
      * Récupère la meilleure position disponible (cache puis fix actif) puis
@@ -174,7 +179,7 @@ public class AlertSender {
             // API 24-29 : requestSingleUpdate + timeout manuel.
             final LocationListener listener = new LocationListener() {
                 @Override
-                public void onLocationChanged(Location location) {
+                public void onLocationChanged(@NonNull Location location) {
                     if (done.compareAndSet(false, true)) {
                         mainHandler.removeCallbacksAndMessages(this);
                         try { lm.removeUpdates(this); } catch (Exception ignored) { }
@@ -183,8 +188,8 @@ public class AlertSender {
                 }
 
                 @Override public void onStatusChanged(String p, int s, Bundle extras) { }
-                @Override public void onProviderEnabled(String p) { }
-                @Override public void onProviderDisabled(String p) { }
+                @Override public void onProviderEnabled(@NonNull String p) { }
+                @Override public void onProviderDisabled(@NonNull String p) { }
             };
             final Runnable timeout = () -> {
                 if (done.compareAndSet(false, true)) {
@@ -223,8 +228,8 @@ public class AlertSender {
      */
     private void dispatchSend(@Nullable Location location, @Nullable Callback callback) {
         new Thread(() -> {
-            String position = buildPositionText(location);
-            sendSms(position);
+            String message = buildMessage(location);
+            sendSms(message);
             if (callback != null) {
                 final boolean found = location != null;
                 mainHandler.post(() -> callback.onSent(found));
@@ -233,46 +238,60 @@ public class AlertSender {
     }
 
     @SuppressLint("MissingPermission") // permissions garanties par l'appelant
-    private void sendSms(String position) {
+    private void sendSms(String message) {
+        // Envoi en une seule part : le message est construit pour tenir sous la
+        // limite SMS (cf. buildMessage), donc pas de multipart (non auto-livré
+        // sur l'émulateur, et un SMS unique reste plus fiable).
         SmsManager smsManager = SmsManager.getDefault();
-        smsManager.sendTextMessage(
-                getNumero(context),
-                null,
-                "Urgence veillez me trouvez à cette position : " + position,
-                null,
-                null
-        );
+        smsManager.sendTextMessage(getNumero(context), null, message, null, null);
     }
 
     /**
-     * Met en forme la position (géocodage inverse + lien Maps) à partir du fix.
-     * Retourne "Position introuvable" si aucun fix n'a été obtenu.
+     * Construit le SMS d'urgence en visant UNE seule part (≤ 160 caractères) :
+     *  - texte d'urgence court ;
+     *  - lien Google Maps (contient déjà les coordonnées exactes — les lignes
+     *    Latitude/Longitude brutes seraient redondantes) ;
+     *  - adresse géocodée ajoutée SEULEMENT si le total reste sous la limite,
+     *    sinon omise.
+     * Retourne un message « position introuvable » si aucun fix n'a été obtenu.
      */
-    private String buildPositionText(@Nullable Location location) {
+    private String buildMessage(@Nullable Location location) {
         if (location == null) {
-            return "Position introuvable";
+            return URGENCE + " Position introuvable.";
         }
 
         double latitude = location.getLatitude();
         double longitude = location.getLongitude();
-        Geocoder geocoder = new Geocoder(context, Locale.getDefault());
-
-        String adresse = "";
-        try {
-            List<Address> addresses = geocoder.getFromLocation(latitude, longitude, 1);
-            if (addresses != null && !addresses.isEmpty()) {
-                adresse = addresses.get(0).getAddressLine(0);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
 
         // Lien Google Maps cliquable, bien plus exploitable que des coordonnées brutes.
         String mapsLink = "https://maps.google.com/?q=" + latitude + "," + longitude;
+        String base = URGENCE + " " + mapsLink;
 
-        return "Latitude : " + latitude +
-                "\nLongitude : " + longitude +
-                "\naAdresse : " + adresse +
-                "\n" + mapsLink;
+        // Adresse ajoutée uniquement si le message complet tient en une part SMS.
+        String adresse = reverseGeocode(latitude, longitude);
+        if (!adresse.isEmpty()) {
+            String withAddress = base + " - " + adresse;
+            if (withAddress.length() <= SMS_SINGLE_PART_MAX) {
+                return withAddress;
+            }
+        }
+        return base;
+    }
+
+    /** Géocodage inverse (bloquant) ; chaîne vide si indisponible. */
+    private String reverseGeocode(double latitude, double longitude) {
+        Geocoder geocoder = new Geocoder(context, Locale.getDefault());
+        try {
+            List<Address> addresses = geocoder.getFromLocation(latitude, longitude, 1);
+            if (addresses != null && !addresses.isEmpty()) {
+                String line = addresses.get(0).getAddressLine(0);
+                if (line != null) {
+                    return line;
+                }
+            }
+        } catch (IOException e) {
+            Log.w("AlertSender", "Géocodage indisponible", e);
+        }
+        return "";
     }
 }

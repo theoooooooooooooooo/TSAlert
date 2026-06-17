@@ -3,7 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.SEND_SMS"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Position approximative : permet l'envoi même si l'utilisateur accorde
+         « Approximative » au lieu de « Précise » (Android 12+). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <!-- Écoute vocale hors ligne (Vosk) en foreground service -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- Vibration pendant le compte à rebours (alerte imminente, mains-libres) -->
